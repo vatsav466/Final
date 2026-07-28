@@ -1,37 +1,44 @@
-# Base image
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Set working directory
-WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies (build tools & C-libraries for Oracle/Nginx/Supervisor if needed)
+# Install system dependencies, C compilers, and required libraries for Python build extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
-    build-essential \
-    libaio1 \
     nginx \
     supervisor \
-    && rm -rf /lib/apt/lists/*
+    build-essential \
+    python3-dev \
+    gcc \
+    g++ \
+    libpq-dev \
+    libssl-dev \
+    libffi-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip, wheel, and setuptools to fix pkg_resources issue for cx_Oracle
-RUN pip install --no-cache-dir --upgrade pip "setuptools<68.0.0" wheel
+WORKDIR /app
 
-# Copy backend requirements
-COPY backend/requirements.txt /app/backend/requirements.txt
-
-# Install backend requirements using no-build-isolation
-RUN if [ -f "/app/backend/requirements.txt" ]; then \
-        pip install --no-cache-dir --no-build-isolation -r /app/backend/requirements.txt; \
-    fi
-
-# Copy application files
 COPY . /app
 
-# Copy supervisor and nginx configs if applicable
-# COPY supervisor.conf /etc/supervisor/conf.d/supervisord.conf
-# COPY nginx.conf /etc/nginx/sites-available/default
+# Upgrade pip, setuptools, and wheel first
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-EXPOSE 5378
+# Install UrdhvaBase package
+RUN if [ -d "/app/backend/UrdhvaBase" ]; then \
+        cd /app/backend/UrdhvaBase && \
+        (sed -i 's/snakecase==1.0.1/snakecase/g' setup.py 2>/dev/null || true) && \
+        pip install --no-cache-dir . || pip install --no-deps --no-cache-dir . ; \
+    fi
 
-CMD ["supervisord", "-n"]
+# Install backend requirements with fallback option if specific pinned versions fail on Python 3.12
+RUN if [ -f "/app/backend/requirements.txt" ]; then \
+        pip install --no-cache-dir -r /app/backend/requirements.txt || \
+        pip install --no-cache-dir --use-deprecated=legacy-resolver -r /app/backend/requirements.txt ; \
+    fi
+
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+EXPOSE 80 5378
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
