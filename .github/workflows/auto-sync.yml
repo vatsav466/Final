@@ -1,4 +1,4 @@
-name: Auto Create PR and Enable Auto Merge
+name: Auto PR and Merge
 
 on:
   push:
@@ -11,38 +11,38 @@ permissions:
   pull-requests: write
 
 jobs:
-  create-pr:
+  auto-pr:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Create Pull Request
-        id: cpr
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          base: main
-          branch: ${{ github.ref_name }}
-          title: "Merge ${{ github.ref_name }} into main"
-          body: |
-            ## Automatic Pull Request
+      - name: Create PR if it doesn't exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH=${GITHUB_REF_NAME}
 
-            This PR was created automatically by GitHub Actions.
+          PR=$(gh pr list \
+            --base main \
+            --head "$BRANCH" \
+            --json number \
+            --jq '.[0].number')
 
-            **Source Branch:** `${{ github.ref_name }}`
-            **Target Branch:** `main`
+          if [ -z "$PR" ]; then
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "Merge $BRANCH into main" \
+              --body "Automatically created by GitHub Actions"
 
-          commit-message: "Auto sync from ${{ github.ref_name }}"
-          labels: |
-            automated
-            sync
+            PR=$(gh pr list \
+              --base main \
+              --head "$BRANCH" \
+              --json number \
+              --jq '.[0].number')
+          fi
 
-      - name: Enable Auto Merge
-        if: steps.cpr.outputs.pull-request-operation == 'created'
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
-          merge-method: squash
+          gh pr merge "$PR" \
+            --merge \
+            --auto
