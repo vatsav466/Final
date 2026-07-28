@@ -1,11 +1,8 @@
-# Step 1: Base Python & Nginx Environment
 FROM python:3.12-slim
 
-# Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies, Nginx, and Supervisor
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     supervisor \
@@ -16,24 +13,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy project files
 COPY . /app
 
-# Install UrdhvaBase package
+# Install UrdhvaBase package (with fallback to ignore missing snakecase==1.0.1 pin)
 RUN if [ -d "/app/backend/UrdhvaBase" ]; then \
-        cd /app/backend/UrdhvaBase && pip install --no-cache-dir . ; \
+        cd /app/backend/UrdhvaBase && \
+        (sed -i 's/snakecase==1.0.1/snakecase/g' setup.py 2>/dev/null || true) && \
+        pip install --no-cache-dir . || pip install --no-deps --no-cache-dir . ; \
     fi
 
-# Install general backend dependencies if a requirements file exists
+# Install backend requirements
 RUN if [ -f "/app/backend/requirements.txt" ]; then \
         pip install --no-cache-dir -r /app/backend/requirements.txt ; \
     fi
 
-# Copy Supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Expose standard web/Nginx port
-EXPOSE 80
+EXPOSE 80 5378
 
-# Start Supervisor to run all services
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
