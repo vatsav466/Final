@@ -18,22 +18,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge into main
+      - name: Merge branch into main
         run: |
-          BRANCH=${GITHUB_REF_NAME}
-
-          git fetch origin
-
+          # Ensure local main is up-to-date
+          git fetch origin main:${{ github.ref_name }}
           git checkout main
           git pull origin main
 
-          git merge origin/$BRANCH --no-edit
+          # Merge the triggering branch into main
+          git merge "origin/${{ github.ref_name }}" --no-edit -m "ci: auto-merge ${{ github.ref_name }} into main"
 
+          # Push changes back to main
           git push origin main
