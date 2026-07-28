@@ -3,8 +3,7 @@ FROM python:3.12-slim
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies, C compilers, and required libraries for Python build extensions
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     nginx \
     supervisor \
     build-essential \
@@ -21,24 +20,25 @@ WORKDIR /app
 
 COPY . /app
 
-# Upgrade pip, setuptools, and wheel first
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Install compatible build tools
+RUN pip install --no-cache-dir \
+    --upgrade pip \
+    "setuptools<81" \
+    wheel
 
-# Install UrdhvaBase package
-RUN if [ -d "/app/backend/UrdhvaBase" ]; then \
-        cd /app/backend/UrdhvaBase && \
-        (sed -i 's/snakecase==1.0.1/snakecase/g' setup.py 2>/dev/null || true) && \
-        pip install --no-cache-dir . || pip install --no-deps --no-cache-dir . ; \
-    fi
-
-# Install backend requirements with fallback option if specific pinned versions fail on Python 3.12
+# Install backend dependencies
 RUN if [ -f "/app/backend/requirements.txt" ]; then \
-        pip install --no-cache-dir -r /app/backend/requirements.txt || \
-        pip install --no-cache-dir --use-deprecated=legacy-resolver -r /app/backend/requirements.txt ; \
-    fi
+    pip install --no-cache-dir -r /app/backend/requirements.txt; \
+fi
+
+# Install local package
+RUN if [ -d "/app/backend/UrdhvaBase" ]; then \
+    cd /app/backend/UrdhvaBase && \
+    pip install --no-cache-dir .; \
+fi
 
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 EXPOSE 80 5378
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/usr/bin/supervisord","-c","/etc/supervisor/conf.d/supervisord.conf"]
