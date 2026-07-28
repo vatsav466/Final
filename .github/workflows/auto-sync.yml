@@ -1,4 +1,4 @@
-name: Auto Sync Main
+name: Auto Create PR and Enable Auto Merge
 
 on:
   push:
@@ -11,25 +11,38 @@ permissions:
   pull-requests: write
 
 jobs:
-  auto-merge-pr:
+  create-pr:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Create and Merge Pull Request
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          
-          # Create Pull Request using GitHub CLI
-          pr_url=$(gh pr create \
-            --base main \
-            --head "$BRANCH_NAME" \
-            --title "auto-sync: merge $BRANCH_NAME into main" \
-            --body "Automated PR created by Auto Sync workflow." || true)
-          
-          # Auto-merge the PR (enables squash/rebase/merge bypassing or satisfying rules)
-          gh pr merge "$BRANCH_NAME" --auto --merge --delete-branch=false || gh pr merge "$BRANCH_NAME" --admin --merge
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: ${{ github.ref_name }}
+          title: "Merge ${{ github.ref_name }} into main"
+          body: |
+            ## Automatic Pull Request
+
+            This PR was created automatically by GitHub Actions.
+
+            **Source Branch:** `${{ github.ref_name }}`
+            **Target Branch:** `main`
+
+          commit-message: "Auto sync from ${{ github.ref_name }}"
+          labels: |
+            automated
+            sync
+
+      - name: Enable Auto Merge
+        if: steps.cpr.outputs.pull-request-operation == 'created'
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
+          merge-method: squash
