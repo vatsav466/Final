@@ -66,29 +66,31 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            # Convert repo name to lowercase
             IMAGE_PATH=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
 
-            # Log into GHCR on server
+            # Log into GHCR on target server
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
             # Pull latest image
             docker pull ${IMAGE_PATH}:latest
 
-            # Create media folder if missing
+            # Create host directory for images if missing
             sudo mkdir -p /opt/digitaltwin_images/
 
-            # Stop existing container
-            docker stop app-container || true
-            docker rm app-container || true
+            # Stop and remove any existing conflicting containers (hpcl & app-container)
+            docker stop hpcl app-container || true
+            docker rm hpcl app-container || true
 
-            # Run container mapping port 5378 to port 5378
+            # Run single container mapping port 5378 to 5378
             docker run -d \
-              --name app-container \
+              --name hpcl \
               --restart always \
               -p 5378:5378 \
               -v /opt/digitaltwin_images/:/opt/digitaltwin_images/ \
               ${IMAGE_PATH}:latest
+
+            # Verify container status
+            docker ps | grep hpcl
 
             # Prune unused images
             docker image prune -f
