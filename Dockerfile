@@ -1,44 +1,71 @@
-FROM python:3.12-slim
+# --- Stage 1: Build Frontend ---
+FROM node:20-alpine AS frontend
+WORKDIR /frontend
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
+# Cache dependencies layer
+COPY frontend/package*.json ./
+RUN npm ci
 
-# Install system dependencies, C compilers, and required libraries for Python build extensions
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx \
-    supervisor \
-    build-essential \
-    python3-dev \
-    gcc \
-    g++ \
-    libpq-dev \
-    libssl-dev \
-    libffi-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Copy source and build static bundle
+COPY frontend/ ./
+RUN npm run build
+
+# --- Stage 2: Final Runtime ---
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/backend/UrdhvaBase:/app/backend/api_manager:/app/backend
 
 WORKDIR /app
 
-COPY . /app
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nginx \
+    supervisor \
+    gcc \
+    build-essential \
+    libldap2-dev \
+    libsasl2-dev \
+    libssl-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip, setuptools, and wheel first
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Install Python dependencies
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && grep -v -i '^cx_Oracle' /app/requirements.txt > /app/requirements.filtered.txt \
+    && pip install --no-cache-dir -r /app/requirements.filtered.txt \
+    && pip install --no-cache-dir "uvicorn[standard]" \
+    && pip install --no-cache-dir \
+        fastapi \
+        redis \
+        sqlalchemy \
+        pydantic \
+        pydantic-settings \
+        cryptography \
+        elasticsearch \
+        pymongo \
+        motor \
+        jinja2 \
+        mangum \
+        numpy \
+        pytz \
+        textx \
+        python-multipart
 
-# Install UrdhvaBase package
-RUN if [ -d "/app/backend/UrdhvaBase" ]; then \
-        cd /app/backend/UrdhvaBase && \
-        (sed -i 's/snakecase==1.0.1/snakecase/g' setup.py 2>/dev/null || true) && \
-        pip install --no-cache-dir . || pip install --no-deps --no-cache-dir . ; \
-    fi
+# Copy Application Files
+COPY backend /app/backend
+COPY --from=frontend /frontend/dist /usr/share/nginx/html
 
-# Install backend requirements with fallback option if specific pinned versions fail on Python 3.12
-RUN if [ -f "/app/backend/requirements.txt" ]; then \
-        pip install --no-cache-dir -r /app/backend/requirements.txt || \
-        pip install --no-cache-dir --use-deprecated=legacy-resolver -r /app/backend/requirements.txt ; \
-    fi
+# Drop-in replacement for removed snakecase package
+RUN printf 'import re\n\ndef convert(s):\n    return re.sub(r"(?<!^)(?=[A-Z])", "_", s).lower()\n' > /app/backend/UrdhvaBase/snakecase.py
 
+# Copy Configuration Files (Nginx left completely untouched as requested)
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-EXPOSE 80 5378
+# Only publish 5378 to the host (8001 is kept internal for Supervisord -> Uvicorn)
+EXPOSE 5378
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
