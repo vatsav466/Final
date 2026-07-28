@@ -1,0 +1,35 @@
+name: Auto Sync Main
+
+on:
+  push:
+    branches:
+      - frontend
+      - backend
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create and Merge Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          
+          # Create Pull Request using GitHub CLI
+          pr_url=$(gh pr create \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --title "auto-sync: merge $BRANCH_NAME into main" \
+            --body "Automated PR created by Auto Sync workflow." || true)
+          
+          # Auto-merge the PR (enables squash/rebase/merge bypassing or satisfying rules)
+          gh pr merge "$BRANCH_NAME" --auto --merge --delete-branch=false || gh pr merge "$BRANCH_NAME" --admin --merge
