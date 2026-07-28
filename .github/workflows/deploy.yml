@@ -66,29 +66,29 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
           script: |
-            # Convert repository name to lowercase for Docker image compatibility
+            # Convert repo name to lowercase
             IMAGE_PATH=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
 
-            # Log into GitHub Container Registry on the remote host
+            # Log into GHCR on server
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-            # Pull the newly built image
+            # Pull latest image
             docker pull ${IMAGE_PATH}:latest
 
-            # Create host directory for static images if it doesn't exist
+            # Create media folder if missing
             sudo mkdir -p /opt/digitaltwin_images/
 
-            # Stop and remove existing container if running
+            # Stop existing container
             docker stop app-container || true
             docker rm app-container || true
 
-            # Run new container mapping host port 5378 to container port 80 (Nginx)
+            # Run container mapping port 5378 to port 5378
             docker run -d \
               --name app-container \
               --restart always \
-              -p 5378:80 \
+              -p 5378:5378 \
               -v /opt/digitaltwin_images/:/opt/digitaltwin_images/ \
               ${IMAGE_PATH}:latest
 
-            # Clean up dangling images
+            # Prune unused images
             docker image prune -f
