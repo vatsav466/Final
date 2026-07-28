@@ -1,4 +1,4 @@
-name: Auto PR and Merge
+name: Auto Sync Frontend/Backend to Main
 
 on:
   push:
@@ -8,41 +8,32 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  auto-pr:
+  sync:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create PR if it doesn't exist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge into main
         run: |
           BRANCH=${GITHUB_REF_NAME}
 
-          PR=$(gh pr list \
-            --base main \
-            --head "$BRANCH" \
-            --json number \
-            --jq '.[0].number')
+          git fetch origin
 
-          if [ -z "$PR" ]; then
-            gh pr create \
-              --base main \
-              --head "$BRANCH" \
-              --title "Merge $BRANCH into main" \
-              --body "Automatically created by GitHub Actions"
+          git checkout main
+          git pull origin main
 
-            PR=$(gh pr list \
-              --base main \
-              --head "$BRANCH" \
-              --json number \
-              --jq '.[0].number')
-          fi
+          git merge origin/$BRANCH --no-edit
 
-          gh pr merge "$PR" \
-            --merge \
-            --auto
+          git push origin main
