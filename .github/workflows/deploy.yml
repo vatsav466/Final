@@ -2,9 +2,12 @@ name: Build and Deploy Application
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
@@ -13,6 +16,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: write
@@ -24,25 +28,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Login to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
+      - name: Docker Metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
             type=sha,format=short
 
-      - name: Build and push Docker image
-        id: build-and-push
+      - name: Build & Push Image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -54,41 +57,52 @@ jobs:
 
   deploy:
     needs: build-and-push
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to Remote Server via SSH
+      - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
+
           script: |
-            # Convert repo name to lowercase
-            IMAGE_PATH=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+            set -e
 
-            # Log into GHCR on server
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+            IMAGE=$(echo ghcr.io/${{ github.repository }} | tr '[:upper:]' '[:lower:]')
 
-            # Pull latest image
-            docker pull ${IMAGE_PATH}:latest
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Create media folder if missing
-            sudo mkdir -p /opt/digitaltwin_images/
+            docker pull ${IMAGE}:latest
 
-            # Stop existing container
             docker stop app-container || true
             docker rm app-container || true
 
-            # Run container mapping port 5378 to port 5378
+            # Kill anything already using port 5378
+            docker ps -q --filter publish=5378 | xargs -r docker stop
+            docker ps -aq --filter publish=5378 | xargs -r docker rm
+
+            sudo mkdir -p /opt/digitaltwin_images
+
             docker run -d \
               --name app-container \
-              --restart always \
+              --restart unless-stopped \
               -p 5378:5378 \
-              -v /opt/digitaltwin_images/:/opt/digitaltwin_images/ \
-              ${IMAGE_PATH}:latest
+              -v /opt/digitaltwin_images:/opt/digitaltwin_images \
+              ${IMAGE}:latest
 
-            # Prune unused images
-            docker image prune -f
+            echo "Waiting for application..."
+            sleep 25
+
+            echo "Checking frontend..."
+            curl -f http://localhost:5378/
+
+            echo "Checking FastAPI docs..."
+            curl -f http://localhost:5378/docs
+
+            docker image prune -af
