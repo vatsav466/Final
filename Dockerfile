@@ -29,6 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsasl2-dev \
     libssl-dev \
     curl \
+    unixodbc \
+    unixodbc-dev \
+    odbcinst \
     && rm -rf /var/lib/apt/lists/*
 
 # WeasyPrint runtime dependencies (Pango/Cairo/GLib stack)
