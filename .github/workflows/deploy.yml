@@ -1,33 +1,25 @@
 name: Build and Deploy Application
-
 on:
   push:
     branches:
       - main
-
   pull_request:
     branches:
       - main
-
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Login to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -35,7 +27,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GH_PAT }}
-
       - name: Docker Metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -44,7 +35,6 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,format=short
-
       - name: Build and Push
         uses: docker/build-push-action@v6
         with:
@@ -54,12 +44,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
   deploy:
     needs: build-and-push
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
-
     steps:
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -70,20 +58,14 @@ jobs:
           port: 22
           script: |
             set -e
-
             IMAGE=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-
             echo "${{ secrets.GH_PAT }}" | sudo docker login ghcr.io \
               -u "${{ github.actor }}" \
               --password-stdin
-
             sudo docker pull ${IMAGE}:latest
-
             sudo docker stop app-container || true
             sudo docker rm app-container || true
-
             sudo mkdir -p /opt/digitaltwin_images
-
             sudo docker run -d \
               --name app-container \
               --restart unless-stopped \
@@ -92,10 +74,19 @@ jobs:
               ${IMAGE}:latest
 
             echo "Waiting for application..."
-            sleep 30
-
-            echo "Checking frontend..."
-            curl -f http://localhost:5378/
+            for i in $(seq 1 15); do
+              if curl -sf http://localhost:5378/ > /dev/null; then
+                echo "Frontend is up"
+                break
+              fi
+              echo "Not ready yet, retrying ($i/15)..."
+              sleep 5
+              if [ "$i" -eq 15 ]; then
+                echo "Frontend failed to start. Container logs:"
+                sudo docker logs app-container
+                exit 1
+              fi
+            done
 
             echo "Checking Swagger..."
             curl -f http://localhost:5378/docs
