@@ -75,14 +75,20 @@ jobs:
 
             echo "Waiting for application..."
             for i in $(seq 1 15); do
-              if curl -sf http://localhost:5378/ > /dev/null; then
-                echo "Frontend is up"
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5378/ || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "Frontend is up (HTTP $STATUS)"
                 break
               fi
-              echo "Not ready yet, retrying ($i/15)..."
+              echo "Not ready yet (HTTP $STATUS), retrying ($i/15)..."
               sleep 5
               if [ "$i" -eq 15 ]; then
-                echo "Frontend failed to start. Container logs:"
+                echo "Frontend failed to start (last HTTP status: $STATUS)."
+                echo "--- Checking if frontend files exist in container ---"
+                sudo docker exec app-container ls -la /app/frontend/dist || echo "Path /app/frontend/dist not found in container"
+                echo "--- nginx config test ---"
+                sudo docker exec app-container nginx -t || true
+                echo "--- Full container logs ---"
                 sudo docker logs app-container
                 exit 1
               fi
