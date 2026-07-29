@@ -34,7 +34,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GH_PAT }}
 
       - name: Docker Metadata
         id: meta
@@ -45,7 +45,7 @@ jobs:
             type=raw,value=latest
             type=sha,format=short
 
-      - name: Build & Push Image
+      - name: Build and Push
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -57,37 +57,31 @@ jobs:
 
   deploy:
     needs: build-and-push
-
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy
+      - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
+          password: ${{ secrets.SERVER_PASS }}
           port: 22
 
           script: |
             set -e
 
-            IMAGE=$(echo ghcr.io/${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+            IMAGE=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GH_PAT }}" | docker login ghcr.io \
+              -u "${{ github.actor }}" \
+              --password-stdin
 
             docker pull ${IMAGE}:latest
 
             docker stop app-container || true
             docker rm app-container || true
-
-            # Kill anything already using port 5378
-            docker ps -q --filter publish=5378 | xargs -r docker stop
-            docker ps -aq --filter publish=5378 | xargs -r docker rm
-
-            sudo mkdir -p /opt/digitaltwin_images
 
             docker run -d \
               --name app-container \
@@ -96,13 +90,13 @@ jobs:
               -v /opt/digitaltwin_images:/opt/digitaltwin_images \
               ${IMAGE}:latest
 
-            echo "Waiting for application..."
-            sleep 25
+            echo "Waiting for container..."
+            sleep 30
 
             echo "Checking frontend..."
             curl -f http://localhost:5378/
 
-            echo "Checking FastAPI docs..."
+            echo "Checking Swagger..."
             curl -f http://localhost:5378/docs
 
-            docker image prune -af
+            docker image prune -f
