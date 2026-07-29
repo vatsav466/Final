@@ -95,6 +95,13 @@ jobs:
             done
 
             echo "Checking Swagger..."
-            curl -f http://localhost:5378/docs
+            DOCS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5378/docs || echo "000")
+            if [ "$DOCS_STATUS" = "000" ]; then
+              echo "Swagger endpoint unreachable (connection failed)."
+              sudo docker logs app-container
+              exit 1
+            else
+              echo "Swagger endpoint reachable (HTTP $DOCS_STATUS)"
+            fi
 
             sudo docker image prune -f
