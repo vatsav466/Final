@@ -22,10 +22,10 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
@@ -46,7 +46,7 @@ jobs:
             type=sha,format=short
 
       - name: Build and Push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -61,36 +61,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to Server
+      - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASS }}
           port: 22
-
           script: |
             set -e
 
             IMAGE=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-            echo "${{ secrets.GH_PAT }}" | docker login ghcr.io \
+            echo "${{ secrets.GH_PAT }}" | sudo docker login ghcr.io \
               -u "${{ github.actor }}" \
               --password-stdin
 
-            docker pull ${IMAGE}:latest
+            sudo docker pull ${IMAGE}:latest
 
-            docker stop app-container || true
-            docker rm app-container || true
+            sudo docker stop app-container || true
+            sudo docker rm app-container || true
 
-            docker run -d \
+            sudo mkdir -p /opt/digitaltwin_images
+
+            sudo docker run -d \
               --name app-container \
               --restart unless-stopped \
               -p 5378:5378 \
               -v /opt/digitaltwin_images:/opt/digitaltwin_images \
               ${IMAGE}:latest
 
-            echo "Waiting for container..."
+            echo "Waiting for application..."
             sleep 30
 
             echo "Checking frontend..."
@@ -99,4 +100,4 @@ jobs:
             echo "Checking Swagger..."
             curl -f http://localhost:5378/docs
 
-            docker image prune -f
+            sudo docker image prune -f
