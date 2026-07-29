@@ -31,19 +31,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# WeasyPrint runtime dependencies (Pango/Cairo/GLib stack)
+# NOTE: libgobject-2.0-0 is NOT a real package name — the libgobject-2.0.so.0
+# shared library ships inside libglib2.0-0. Installing the wrong/non-existent
+# name is why WeasyPrint couldn't find it at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libpangocairo-1.0-0 \
-    libgobject-2.0-0 \
+    libglib2.0-0 \
     libcairo2 \
     libgdk-pixbuf2.0-0 \
     libffi-dev \
     shared-mime-info \
     fonts-liberation \
+    && ldconfig \
     && rm -rf /var/lib/apt/lists/*
 
-    
 # Install Python dependencies
 COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
