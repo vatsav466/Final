@@ -72,7 +72,9 @@ RUN pip install --no-cache-dir --upgrade pip \
         numpy \
         pytz \
         textx \
-        python-multipart
+        python-multipart \
+        aiohttp \
+        xlsxwriter
 
 # Copy Application Files
 COPY backend /app/backend
