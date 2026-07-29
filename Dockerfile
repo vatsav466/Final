@@ -83,11 +83,20 @@ COPY --from=frontend /frontend/dist /usr/share/nginx/html
 # Drop-in replacement for removed snakecase package
 RUN printf 'import re\n\ndef convert(s):\n    return re.sub(r"(?<!^)(?=[A-Z])", "_", s).lower()\n' > /app/backend/UrdhvaBase/snakecase.py
 
+# NOTE: we deliberately do NOT `pip install -e` the UrdhvaBase package here.
+# Its setup.py pins snakecase==1.0.1, which has been pulled from PyPI, so an
+# editable/packaged install fails at build time. PYTHONPATH already makes
+# `import urdhva_base` (and `python3 -m urdhva_base`) resolve correctly via
+# plain path lookup, using the local snakecase.py shim above instead.
+
 # Copy Configuration Files (Nginx left completely untouched as requested)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Only publish 5378 to the host (8001 is kept internal for Supervisord -> Uvicorn)
+# Only publish 5378 to the host.
+# Internal-only ports (not published, proxied by nginx):
+#   8001 -> urdhva_base.restapi:app  (full backend aggregator: /docs, /api/*)
+#   8002 -> cache_gateway.cache_api_actions:app (/api_cache/*)
 EXPOSE 5378
 
 CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
