@@ -310,7 +310,7 @@ class BasePostgresModel(pydantic.BaseModel):
             return results_data
         except Exception as e:
             print(f"Exception while running aggregation query {e}")
-            raise f"Exception while running aggregation query {e}"
+            raise Exception(f"Exception while running aggregation query {e}") from e
         finally:
             await asyncio.shield(session.close())
 
