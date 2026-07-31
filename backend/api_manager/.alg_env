@@ -18,7 +18,7 @@ smtp_ssl_enabled=False
 
 
 encryption_key='mcMAmuM2wLgNey7hgaCXDsaH__h13R2esSQ7fKvX3ak='
-enable_encrypted_payload=False
+enable_encrypted_payload=True
 #disable_api_extra_inputs=True
 minio_endpoint="http://13.126.249.159:9006"
 minio_access_key="minioadmin"
