@@ -261,7 +261,11 @@ class AuthenticationManager:
     @classmethod
     async def generate_auth_info(cls, user_info, jwt_auth=False):
 
-        role_names = ", ".join(f"'{val}'" for val in user_info['novex_role'])
+        user_roles = user_info.get('novex_role') or []
+        if not user_roles:
+            print(f"-- User {user_info.get('username')} has no roles assigned --")
+            return False, "Access Restricted", {}
+        role_names = ", ".join(f"'{val}'" for val in user_roles)
         role = await hpcl_ceg_model.Roles.get_aggr_data(f"select * from roles where name in ({role_names})")
         if not role['data']:
             print("-- Roles not found in database --")
@@ -357,7 +361,7 @@ class AuthenticationManager:
         return response
 
     @classmethod
-    async def create_user(cls, username, password, role, first_name, last_name, employee_id, status=True):
+    async def create_user(cls, username, password, role, first_name, last_name, employee_id, email, status=True):
         """
         Creates a new user with the specified username, password, and status.
 
@@ -368,6 +372,7 @@ class AuthenticationManager:
             first_name (str): First name of the user
             last_name (str): Last name of the user
             employee_id (str): Employee ID of the user
+            email (str): Email address of the user
             status (bool): The active status of the user (default is True).
 
         Returns:
@@ -379,9 +384,26 @@ class AuthenticationManager:
             for user in data["data"]:
                 if user["username"].lower() == username.lower():
                     return False, "user exists"
-        await hpcl_ceg_model.UsersCreate(**{"username": username.lower(), "password": password, "role": role,
-                                      "first_name": first_name, "last_name": last_name, "employee_id": employee_id,
-                                      "status": True}).create()
+        await hpcl_ceg_model.UsersCreate(**{
+            "username": username.lower(),
+            "password": password,
+            "email": email,
+            "novex_role": role,
+            "first_name": first_name,
+            "last_name": last_name,
+            "employee_id": employee_id,
+            "bu": [],
+            "sap_id": [],
+            "system_role": [],
+            "region": [],
+            "state": [],
+            "zone": [],
+            "sales_area": [],
+            "is_ad_user": False,
+            "manual_user": True,
+            "login_user_id": employee_id,
+            "status": True,
+        }).create()
         return True, "User created successfully"
 
     @classmethod
