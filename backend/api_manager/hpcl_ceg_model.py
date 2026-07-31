@@ -317,8 +317,9 @@ class Users_Fetch_UsersParams(pydantic.BaseModel):
 
 
 class Users_Create_UserParams(pydantic.BaseModel):
-    username: str
+    username: str = pydantic.Field(**{'pattern': '^[a-zA-Z0-9_.-]+$'})
     password: str
+    email: str
     first_name: str
     last_name: str
     employee_id: str
@@ -331,7 +332,7 @@ class Users_Create_UserParams(pydantic.BaseModel):
 
 class Users_Update_User_StatusParams(pydantic.BaseModel):
     enable: bool
-    username: str
+    username: str = pydantic.Field(**{'pattern': '^[a-zA-Z0-9_.-]+$'})
     first_name: str
     last_name: str
     region: typing.Optional[typing.List[str]] = pydantic.Field("", **{})
