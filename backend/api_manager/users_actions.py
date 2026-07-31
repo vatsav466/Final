@@ -34,7 +34,8 @@ async def users_fetch_users(data: Users_Fetch_UsersParams):
 @router.post('/create_user', tags=['Users'])
 async def users_create_user(data: Users_Create_UserParams):
     return await auth_manager.AuthenticationManager.create_user(data.username, data.password, data.role,
-                                                                data.first_name, data.last_name, data.employee_id, True)
+                                                                data.first_name, data.last_name, data.employee_id,
+                                                                data.email, True)
 
 
 # Action login
@@ -64,7 +65,7 @@ async def users_login(request: fastapi.Request, data: Users_LoginParams):
             "login_time": urdhva_base.utilities.get_present_time(),
             "login_status": LoginStatus.login,
             "failure_reason": "",
-            "auth_method": "SSO" if user_info["is_ad_user"] else "Password",
+            "auth_method": "SSO" if user_info.get("is_ad_user") else "Password",
             "remarks": ""
             }
         # print("login_audit :", login_audit)
