@@ -28,7 +28,7 @@
 
 export const config = {
   encryption: {
-    enabled: false, // Set to false to disable encryption
+    enabled: true, // Set to false to disable encryption
     secret: "mcMAmuM2wLgNey7hgaCXDsaH__h13R2esSQ7fKvX3ak=", // Move to env vars in production
     doubleEncode: false // Set to true if backend expects double base64 encoding
   },
